@@ -1,0 +1,26 @@
+{
+  "__inputs": [],
+  "__requires": [{"type":"grafana","id":"grafana","name":"Grafana","version":"10.2.2"}],
+  "title": "Node Exporter - Overview (Example)",
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "CPU Usage (node)",
+      "datasource": {"type":"prometheus","uid":"Prometheus"},
+      "targets": [
+        {"expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\\\"idle\\\"}[5m])) * 100)", "legendFormat": "{{instance}}"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Memory Used %",
+      "datasource": {"type":"prometheus","uid":"Prometheus"},
+      "targets": [
+        {"expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100", "legendFormat": "{{instance}}"}
+      ]
+    }
+  ]
+}

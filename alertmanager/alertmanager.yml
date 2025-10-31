@@ -1,0 +1,25 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: default
+  group_by: ['alertname', 'project']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 2h
+
+receivers:
+  - name: default
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/services/PUT/YOUR/HOOK'
+        channel: '#alerts'
+        send_resolved: true
+        title: '{{ .CommonAnnotations.summary }}'
+        text: '{{ range .Alerts }}\n*{{ .Labels.severity }}* {{ .Annotations.description }} ({{ .Labels.instance }})\n{{ end }}'
+    telegram_configs:
+      - bot_token: '000000:YOUR_BOT_TOKEN'
+        chat_id: 123456789
+        message: '{{ template "telegram.default" . }}'
+
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
