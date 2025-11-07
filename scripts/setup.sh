@@ -339,6 +339,18 @@ if [ "$INSTALL_PORTAINER" == "true" ]; then
         "${PORTAINER_VALUES_TMP}"
     fi
 
+    # Проверка на существующие ClusterRoleBinding от старой установки Portainer
+    if kubectl get clusterrolebinding portainer 2>/dev/null | grep -q "portainer"; then
+        OLD_NAMESPACE=$(kubectl get clusterrolebinding portainer -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-namespace}' 2>/dev/null || echo "")
+        if [ -n "$OLD_NAMESPACE" ] && [ "$OLD_NAMESPACE" != "${MONITORING_NAMESPACE}" ]; then
+            log_warn "Обнаружен ClusterRoleBinding 'portainer' из namespace '${OLD_NAMESPACE}'"
+            log_warn "Удаление старого ClusterRoleBinding для избежания конфликтов..."
+            kubectl delete clusterrolebinding portainer 2>/dev/null || true
+            kubectl delete clusterrole portainer 2>/dev/null || true
+            sleep 2
+        fi
+    fi
+
     if helm list -n "${MONITORING_NAMESPACE}" | grep -q "^portainer"; then
         log_warn "Portainer уже установлен, выполняется обновление..."
         if helm upgrade portainer portainer/portainer \
@@ -348,8 +360,20 @@ if [ "$INSTALL_PORTAINER" == "true" ]; then
             log_info "Portainer успешно обновлен"
         else
             log_error "Ошибка при обновлении Portainer"
-            check_pods_status "${MONITORING_NAMESPACE}" "app.kubernetes.io/name=portainer"
-            exit 1
+            log_info "Попытка принудительной замены ресурсов..."
+            # Попытка принудительной установки
+            if helm upgrade portainer portainer/portainer \
+                -n "${MONITORING_NAMESPACE}" \
+                -f "${PORTAINER_VALUES_TMP}" \
+                ${HELM_WAIT_ARGS} \
+                --force 2>/dev/null; then
+                log_info "Portainer успешно обновлен (с --force)"
+            else
+                check_pods_status "${MONITORING_NAMESPACE}" "app.kubernetes.io/name=portainer"
+                log_error "Не удалось обновить Portainer. Возможно, нужно удалить старый релиз вручную."
+                log_info "Выполните: helm uninstall portainer -n ${OLD_NAMESPACE:-management} 2>/dev/null || true"
+                exit 1
+            fi
         fi
     else
         log_info "Выполняется установка Portainer..."
@@ -361,8 +385,25 @@ if [ "$INSTALL_PORTAINER" == "true" ]; then
             log_info "Portainer успешно установлен"
         else
             log_error "Ошибка при установке Portainer"
-            check_pods_status "${MONITORING_NAMESPACE}" "app.kubernetes.io/name=portainer"
-            exit 1
+            log_info "Попытка принудительной установки..."
+            # Удаление конфликтующих ресурсов
+            kubectl delete clusterrolebinding portainer 2>/dev/null || true
+            kubectl delete clusterrole portainer 2>/dev/null || true
+            sleep 2
+
+            if helm install portainer portainer/portainer \
+                -n "${MONITORING_NAMESPACE}" \
+                -f "${PORTAINER_VALUES_TMP}" \
+                --create-namespace \
+                ${HELM_WAIT_ARGS} \
+                --replace 2>/dev/null; then
+                log_info "Portainer успешно установлен (с --replace)"
+            else
+                check_pods_status "${MONITORING_NAMESPACE}" "app.kubernetes.io/name=portainer"
+                log_error "Не удалось установить Portainer. Проверьте конфликтующие ресурсы:"
+                log_info "kubectl get clusterrolebinding,clusterrole | grep portainer"
+                exit 1
+            fi
         fi
     fi
 
