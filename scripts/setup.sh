@@ -494,61 +494,52 @@ metadata:
   labels:
     app.kubernetes.io/name: portainer
 rules:
-  # Явные права на все основные ресурсы
+  # Полные права на все ресурсы (используем verbs: ["*"] для максимальных прав)
   - apiGroups: [""]
-    resources:
-      - "*"
-      - namespaces
-      - nodes
-      - pods
-      - services
-      - endpoints
-      - configmaps
-      - secrets
-      - persistentvolumes
-      - persistentvolumeclaims
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    resources: ["*"]
+    verbs: ["*"]
   - apiGroups: ["apps"]
     resources: ["*"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    verbs: ["*"]
   - apiGroups: ["batch"]
     resources: ["*"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    verbs: ["*"]
   - apiGroups: ["extensions"]
     resources: ["*"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    verbs: ["*"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["*"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    verbs: ["*"]
   - apiGroups: ["storage.k8s.io"]
     resources: ["*"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["*"]
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["*"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["*"]
   - apiGroups: ["metrics.k8s.io"]
     resources: ["*"]
-    verbs: ["get", "list"]
+    verbs: ["*"]
   # Дополнительные API группы для полного доступа
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["*"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["*"]
   - apiGroups: ["policy"]
     resources: ["*"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["*"]
   - apiGroups: ["autoscaling"]
     resources: ["*"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["*"]
   - apiGroups: ["coordination.k8s.io"]
     resources: ["*"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["*"]
 EOF
 
         # Создание или обновление ClusterRoleBinding для реального ServiceAccount
         log_info "Создание/обновление ClusterRoleBinding для ServiceAccount ${PORTAINER_SA} в namespace ${PORTAINER_NAMESPACE}..."
 
-        # Удаляем старые ClusterRoleBinding, если они существуют
+        # Удаляем старые ClusterRoleBinding, если они существуют (для избежания конфликтов)
         kubectl delete clusterrolebinding portainer portainer-cluster-admin 2>/dev/null || true
+        sleep 1
 
         # Создаем новый ClusterRoleBinding
         kubectl apply -f - <<EOF
