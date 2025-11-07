@@ -180,7 +180,7 @@ sed -e "s|retention_period: 744h|retention_period: ${LOKI_RETENTION}|g" \
 
 # Установка Prometheus (kube-prometheus-stack)
 log_info "Установка Prometheus (kube-prometheus-stack)..."
-if helm list -n "${MONITORING_NAMESPACE}" | grep -q "kube-prometheus-stack"; then
+if helm list -n "${MONITORING_NAMESPACE}" | grep -q "^kube-prometheus-stack"; then
     log_warn "Prometheus уже установлен, выполняется обновление..."
     helm upgrade kube-prometheus-stack prometheus-community/kube-prometheus-stack \
         -n "${MONITORING_NAMESPACE}" \
@@ -198,7 +198,7 @@ fi
 
 # Установка Loki
 log_info "Установка Loki..."
-if helm list -n "${MONITORING_NAMESPACE}" | grep -q "loki"; then
+if helm list -n "${MONITORING_NAMESPACE}" | grep -q "^loki"; then
     log_warn "Loki уже установлен, выполняется обновление..."
     helm upgrade loki grafana/loki-stack \
         -n "${MONITORING_NAMESPACE}" \
@@ -233,7 +233,7 @@ if [ "$INSTALL_PORTAINER" == "true" ]; then
         "${PORTAINER_VALUES_TMP}"
     fi
 
-    if helm list -n "${MONITORING_NAMESPACE}" | grep -q "portainer"; then
+    if helm list -n "${MONITORING_NAMESPACE}" | grep -q "^portainer"; then
         log_warn "Portainer уже установлен, выполняется обновление..."
         helm upgrade portainer portainer/portainer \
             -n "${MONITORING_NAMESPACE}" \
