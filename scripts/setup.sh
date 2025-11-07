@@ -457,15 +457,40 @@ if [ "$INSTALL_PORTAINER" == "true" ]; then
         fi
     fi
 
-    # Проверка и создание RBAC ресурсов для Portainer (если Helm chart не создал)
-    log_info "Проверка RBAC для Portainer..."
-    if ! kubectl get clusterrole portainer -n "${MONITORING_NAMESPACE}" >/dev/null 2>&1; then
-        log_info "Создание ClusterRole для Portainer..."
+    # Поиск реального namespace и ServiceAccount Portainer
+    log_info "Поиск установленного Portainer..."
+    PORTAINER_NAMESPACE=""
+    PORTAINER_SA=""
+
+    # Проверяем namespace monitoring
+    if kubectl get deployment portainer -n "${MONITORING_NAMESPACE}" >/dev/null 2>&1; then
+        PORTAINER_NAMESPACE="${MONITORING_NAMESPACE}"
+        PORTAINER_SA=$(kubectl get deployment portainer -n "${MONITORING_NAMESPACE}" -o jsonpath='{.spec.template.spec.serviceAccountName}' 2>/dev/null || echo "portainer")
+    # Проверяем namespace management (старая установка)
+    elif kubectl get deployment portainer -n management >/dev/null 2>&1; then
+        PORTAINER_NAMESPACE="management"
+        PORTAINER_SA=$(kubectl get deployment portainer -n management -o jsonpath='{.spec.template.spec.serviceAccountName}' 2>/dev/null || echo "portainer-sa-clusteradmin")
+    # Ищем в любом namespace
+    else
+        PORTAINER_DEPLOYMENT=$(kubectl get deployment --all-namespaces -l app.kubernetes.io/name=portainer -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || echo "")
+        if [ -n "${PORTAINER_DEPLOYMENT}" ]; then
+            PORTAINER_NAMESPACE="${PORTAINER_DEPLOYMENT}"
+            PORTAINER_SA=$(kubectl get deployment portainer -n "${PORTAINER_NAMESPACE}" -o jsonpath='{.spec.template.spec.serviceAccountName}' 2>/dev/null || echo "portainer")
+        fi
+    fi
+
+    if [ -z "${PORTAINER_NAMESPACE}" ]; then
+        log_warn "Portainer не найден, пропускаем настройку RBAC"
+    else
+        log_info "Найден Portainer в namespace: ${PORTAINER_NAMESPACE}, ServiceAccount: ${PORTAINER_SA}"
+
+        # Создание или обновление ClusterRole
+        log_info "Создание/обновление ClusterRole для Portainer..."
         kubectl apply -f - <<EOF
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: portainer
+  name: portainer-cluster-admin
   labels:
     app.kubernetes.io/name: portainer
 rules:
@@ -494,45 +519,36 @@ rules:
     resources: ["*"]
     verbs: ["get", "list"]
 EOF
-    fi
 
-    # Проверка и создание ClusterRoleBinding
-    if ! kubectl get clusterrolebinding portainer >/dev/null 2>&1; then
-        log_info "Создание ClusterRoleBinding для Portainer..."
-        SERVICE_ACCOUNT="portainer"
-        if ! kubectl get serviceaccount "${SERVICE_ACCOUNT}" -n "${MONITORING_NAMESPACE}" >/dev/null 2>&1; then
-            log_info "Создание ServiceAccount для Portainer..."
-            kubectl create serviceaccount "${SERVICE_ACCOUNT}" -n "${MONITORING_NAMESPACE}" 2>/dev/null || true
-        fi
+        # Создание или обновление ClusterRoleBinding для реального ServiceAccount
+        log_info "Создание/обновление ClusterRoleBinding для ServiceAccount ${PORTAINER_SA} в namespace ${PORTAINER_NAMESPACE}..."
 
+        # Удаляем старые ClusterRoleBinding, если они существуют
+        kubectl delete clusterrolebinding portainer portainer-cluster-admin 2>/dev/null || true
+
+        # Создаем новый ClusterRoleBinding
         kubectl apply -f - <<EOF
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: portainer
+  name: portainer-cluster-admin
   labels:
     app.kubernetes.io/name: portainer
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: portainer
+  name: portainer-cluster-admin
 subjects:
   - kind: ServiceAccount
-    name: ${SERVICE_ACCOUNT}
-    namespace: ${MONITORING_NAMESPACE}
+    name: ${PORTAINER_SA}
+    namespace: ${PORTAINER_NAMESPACE}
 EOF
-    fi
 
-    # Обновление Deployment Portainer для использования ServiceAccount
-    log_info "Обновление Deployment Portainer для использования ServiceAccount..."
-    if kubectl get deployment portainer -n "${MONITORING_NAMESPACE}" >/dev/null 2>&1; then
-        kubectl patch deployment portainer -n "${MONITORING_NAMESPACE}" \
-            -p '{"spec":{"template":{"spec":{"serviceAccountName":"portainer"}}}}' \
-            >/dev/null 2>&1 || log_warn "Не удалось обновить ServiceAccount в Deployment (может быть уже установлен)"
+        log_info "RBAC настроен для Portainer (ServiceAccount: ${PORTAINER_SA}, Namespace: ${PORTAINER_NAMESPACE})"
 
         # Перезапуск подов Portainer для применения изменений
         log_info "Перезапуск подов Portainer для применения RBAC изменений..."
-        kubectl rollout restart deployment portainer -n "${MONITORING_NAMESPACE}" >/dev/null 2>&1 || true
+        kubectl rollout restart deployment portainer -n "${PORTAINER_NAMESPACE}" >/dev/null 2>&1 || true
     fi
 
     rm -f "${PORTAINER_VALUES_TMP}"
