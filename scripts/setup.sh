@@ -92,6 +92,7 @@ LOKI_STORAGE=${LOKI_STORAGE:-20Gi}
 INSTALL_PORTAINER=${INSTALL_PORTAINER:-false}
 ENABLE_INGRESS=${ENABLE_INGRESS:-false}
 INGRESS_CLASS=${INGRESS_CLASS:-nginx}
+HELM_WAIT=${HELM_WAIT:-true}  # Ожидать готовности подов (можно отключить для диагностики)
 
 # Проверка обязательных параметров
 if [ -z "$DOMAIN" ]; then
@@ -178,40 +179,88 @@ sed -e "s|retention_period: 744h|retention_period: ${LOKI_RETENTION}|g" \
     -e "s|size: 20Gi|size: ${LOKI_STORAGE}|g" \
     "${LOKI_VALUES}" > "${LOKI_VALUES_TMP}"
 
+# Функция для проверки статуса подов
+check_pods_status() {
+    local namespace=$1
+    local label_selector=$2
+    log_info "Проверка статуса подов (label: ${label_selector})..."
+    kubectl get pods -n "${namespace}" -l "${label_selector}" 2>/dev/null || true
+    echo ""
+}
+
 # Установка Prometheus (kube-prometheus-stack)
 log_info "Установка Prometheus (kube-prometheus-stack)..."
+HELM_WAIT_ARGS=""
+if [ "$HELM_WAIT" == "true" ]; then
+    HELM_WAIT_ARGS="--wait --timeout 10m"
+    log_info "Ожидание готовности подов включено (таймаут: 10 минут)"
+else
+    log_warn "Ожидание готовности подов отключено (HELM_WAIT=false)"
+    log_warn "Проверьте статус подов вручную после установки"
+fi
+
 if helm list -n "${MONITORING_NAMESPACE}" | grep -q "^kube-prometheus-stack"; then
     log_warn "Prometheus уже установлен, выполняется обновление..."
-    helm upgrade kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+    if helm upgrade kube-prometheus-stack prometheus-community/kube-prometheus-stack \
         -n "${MONITORING_NAMESPACE}" \
         -f "${PROMETHEUS_VALUES_TMP}" \
-        --wait \
-        --timeout 10m
+        ${HELM_WAIT_ARGS}; then
+        log_info "Prometheus успешно обновлен"
+    else
+        log_error "Ошибка при обновлении Prometheus"
+        log_info "Проверьте статус подов:"
+        check_pods_status "${MONITORING_NAMESPACE}" "app.kubernetes.io/name=prometheus"
+        log_info "Проверьте события:"
+        kubectl get events -n "${MONITORING_NAMESPACE}" --sort-by='.lastTimestamp' | tail -20
+        exit 1
+    fi
 else
-    helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+    log_info "Выполняется установка Prometheus (это может занять несколько минут)..."
+    if helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
         -n "${MONITORING_NAMESPACE}" \
         -f "${PROMETHEUS_VALUES_TMP}" \
         --create-namespace \
-        --wait \
-        --timeout 10m
+        ${HELM_WAIT_ARGS}; then
+        log_info "Prometheus успешно установлен"
+    else
+        log_error "Ошибка при установке Prometheus"
+        log_info "Проверьте статус подов:"
+        check_pods_status "${MONITORING_NAMESPACE}" "app.kubernetes.io/name=prometheus"
+        log_info "Проверьте PVC:"
+        kubectl get pvc -n "${MONITORING_NAMESPACE}"
+        log_info "Проверьте события:"
+        kubectl get events -n "${MONITORING_NAMESPACE}" --sort-by='.lastTimestamp' | tail -20
+        exit 1
+    fi
 fi
 
 # Установка Loki
 log_info "Установка Loki..."
 if helm list -n "${MONITORING_NAMESPACE}" | grep -q "^loki"; then
     log_warn "Loki уже установлен, выполняется обновление..."
-    helm upgrade loki grafana/loki-stack \
+    if helm upgrade loki grafana/loki-stack \
         -n "${MONITORING_NAMESPACE}" \
         -f "${LOKI_VALUES_TMP}" \
-        --wait \
-        --timeout 10m
+        ${HELM_WAIT_ARGS}; then
+        log_info "Loki успешно обновлен"
+    else
+        log_error "Ошибка при обновлении Loki"
+        check_pods_status "${MONITORING_NAMESPACE}" "app=loki"
+        exit 1
+    fi
 else
-    helm install loki grafana/loki-stack \
+    log_info "Выполняется установка Loki..."
+    if helm install loki grafana/loki-stack \
         -n "${MONITORING_NAMESPACE}" \
         -f "${LOKI_VALUES_TMP}" \
         --create-namespace \
-        --wait \
-        --timeout 10m
+        ${HELM_WAIT_ARGS}; then
+        log_info "Loki успешно установлен"
+    else
+        log_error "Ошибка при установке Loki"
+        check_pods_status "${MONITORING_NAMESPACE}" "app=loki"
+        exit 1
+    fi
 fi
 
 # Установка Portainer (опционально)
@@ -235,18 +284,29 @@ if [ "$INSTALL_PORTAINER" == "true" ]; then
 
     if helm list -n "${MONITORING_NAMESPACE}" | grep -q "^portainer"; then
         log_warn "Portainer уже установлен, выполняется обновление..."
-        helm upgrade portainer portainer/portainer \
+        if helm upgrade portainer portainer/portainer \
             -n "${MONITORING_NAMESPACE}" \
             -f "${PORTAINER_VALUES_TMP}" \
-            --wait \
-            --timeout 10m
+            ${HELM_WAIT_ARGS}; then
+            log_info "Portainer успешно обновлен"
+        else
+            log_error "Ошибка при обновлении Portainer"
+            check_pods_status "${MONITORING_NAMESPACE}" "app.kubernetes.io/name=portainer"
+            exit 1
+        fi
     else
-        helm install portainer portainer/portainer \
+        log_info "Выполняется установка Portainer..."
+        if helm install portainer portainer/portainer \
             -n "${MONITORING_NAMESPACE}" \
             -f "${PORTAINER_VALUES_TMP}" \
             --create-namespace \
-            --wait \
-            --timeout 10m
+            ${HELM_WAIT_ARGS}; then
+            log_info "Portainer успешно установлен"
+        else
+            log_error "Ошибка при установке Portainer"
+            check_pods_status "${MONITORING_NAMESPACE}" "app.kubernetes.io/name=portainer"
+            exit 1
+        fi
     fi
 
     rm -f "${PORTAINER_VALUES_TMP}"
