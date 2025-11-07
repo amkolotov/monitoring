@@ -27,7 +27,7 @@ set -euo pipefail
 #   INSTALL_PORTAINER     - установить Portainer (по умолчанию: false)
 #   ENABLE_INGRESS        - включить Ingress для сервисов (по умолчанию: false)
 #   INGRESS_CLASS         - класс Ingress Controller (по умолчанию: nginx)
-#   MONITORING_DOMAIN     - домен для мониторинга (по умолчанию: monitoring.${DOMAIN})
+#   ACME_EMAIL           - email для Let's Encrypt (опционально, по умолчанию: admin@${DOMAIN})
 
 # Цвета для вывода
 RED='\033[0;31m'
@@ -92,7 +92,6 @@ LOKI_STORAGE=${LOKI_STORAGE:-20Gi}
 INSTALL_PORTAINER=${INSTALL_PORTAINER:-false}
 ENABLE_INGRESS=${ENABLE_INGRESS:-false}
 INGRESS_CLASS=${INGRESS_CLASS:-nginx}
-MONITORING_DOMAIN=${MONITORING_DOMAIN:-monitoring.${DOMAIN}}
 
 # Проверка обязательных параметров
 if [ -z "$DOMAIN" ]; then
@@ -102,10 +101,11 @@ if [ -z "$DOMAIN" ]; then
     exit 1
 fi
 
-# Установка ACME_EMAIL по умолчанию
+# Установка ACME_EMAIL по умолчанию (если не указан)
 if [ -z "$ACME_EMAIL" ]; then
     ACME_EMAIL="admin@${DOMAIN}"
     log_warn "ACME_EMAIL не установлен, используется: ${ACME_EMAIL}"
+    log_warn "Рекомендуется указать ACME_EMAIL явно для получения уведомлений от Let's Encrypt"
 fi
 
 # Предупреждение о пароле Grafana
@@ -127,7 +127,6 @@ log_info "  INSTALL_PORTAINER: ${INSTALL_PORTAINER}"
 log_info "  ENABLE_INGRESS: ${ENABLE_INGRESS}"
 if [ "$ENABLE_INGRESS" == "true" ]; then
   log_info "  INGRESS_CLASS: ${INGRESS_CLASS}"
-  log_info "  MONITORING_DOMAIN: ${MONITORING_DOMAIN}"
 fi
 
 # Проверка зависимостей
@@ -166,7 +165,7 @@ sed -e "s|retention: 15d|retention: ${PROMETHEUS_RETENTION}|g" \
 if [ "$ENABLE_INGRESS" == "true" ]; then
   log_info "Настройка Ingress для Prometheus и Grafana..."
   sed -i \
-    -e "s|PLACEHOLDER_DOMAIN|${MONITORING_DOMAIN}|g" \
+    -e "s|PLACEHOLDER_DOMAIN|${DOMAIN}|g" \
     -e "s|ingressClassName: nginx|ingressClassName: ${INGRESS_CLASS}|g" \
     -e "s|enabled: false  # Включается через переменную ENABLE_INGRESS|enabled: true|g" \
     "${PROMETHEUS_VALUES_TMP}"
@@ -228,7 +227,7 @@ if [ "$INSTALL_PORTAINER" == "true" ]; then
     if [ "$ENABLE_INGRESS" == "true" ]; then
       log_info "Настройка Ingress для Portainer..."
       sed -i \
-        -e "s|PLACEHOLDER_DOMAIN|${MONITORING_DOMAIN}|g" \
+        -e "s|PLACEHOLDER_DOMAIN|${DOMAIN}|g" \
         -e "s|ingressClassName: nginx|ingressClassName: ${INGRESS_CLASS}|g" \
         -e "s|enabled: false  # Включается через переменную ENABLE_INGRESS|enabled: true|g" \
         "${PORTAINER_VALUES_TMP}"
@@ -270,14 +269,14 @@ if [ "$ENABLE_INGRESS" == "true" ]; then
 
   log_info ""
   log_info "URL сервисов мониторинга:"
-  log_info "  Grafana:    https://grafana.${MONITORING_DOMAIN}"
-  log_info "  Prometheus: https://prometheus.${MONITORING_DOMAIN}"
+  log_info "  Grafana:    https://grafana.${DOMAIN}"
+  log_info "  Prometheus: https://prometheus.${DOMAIN}"
   if [ "$INSTALL_PORTAINER" == "true" ]; then
-    log_info "  Portainer:  https://portainer.${MONITORING_DOMAIN}"
+    log_info "  Portainer:  https://portainer.${DOMAIN}"
   fi
   log_info ""
   log_info "ВАЖНО: Настройте DNS записи:"
-  log_info "  *.${MONITORING_DOMAIN} → IP вашего Ingress Controller"
+  log_info "  *.${DOMAIN} → IP вашего Ingress Controller"
   log_info "  Или отдельные A-записи для каждого поддомена"
 fi
 

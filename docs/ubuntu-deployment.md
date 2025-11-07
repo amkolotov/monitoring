@@ -26,14 +26,14 @@
 
 ```bash
 # Создание пользователя
-sudo adduser monitoring
+sudo adduser deploy
 # Укажите пароль и заполните информацию (можно пропустить, нажав Enter)
 
 # Добавление пользователя в группу sudo
-sudo usermod -aG sudo monitoring
+sudo usermod -aG sudo deploy
 
 # Переключение на нового пользователя
-su - monitoring
+su - deploy
 
 # Проверка прав
 sudo whoami  # Должно вывести: root
@@ -43,21 +43,20 @@ sudo whoami  # Должно вывести: root
 
 ```bash
 # Генерация SSH ключа
-ssh-keygen -t ed25519 -C "your_email@example.com" -f ~/.ssh/id_ed25519
+ssh-keygen -t ed25519 -C "your_email@example.com" -f ~/.ssh/id_ed25519_deploy
 
 # Или используйте RSA (если ed25519 не поддерживается)
 # ssh-keygen -t rsa -b 4096 -C "your_email@example.com" -f ~/.ssh/id_rsa
 
 # Настройка прав доступа
-chmod 600 ~/.ssh/id_ed25519
-chmod 644 ~/.ssh/id_ed25519.pub
+chmod 600 ~/.ssh/id_ed25519_deploy
+chmod 644 ~/.ssh/id_ed25519_deploy.pub
 
 # Добавление ключа в ssh-agent
-eval "$(ssh-agent -s)"
-ssh-add ~/.ssh/id_ed25519
+eval "$(ssh-agent -s)" && ssh-add ~/.ssh/id_ed25519_deploy
 
 # Вывод публичного ключа (скопируйте его)
-cat ~/.ssh/id_ed25519.pub
+cat ~/.ssh/id_ed25519_deploy.pub
 ```
 
 **Добавление SSH ключа в Git (GitHub/GitLab/Bitbucket):**
@@ -182,7 +181,7 @@ sed -i 's/127.0.0.1/your-server-ip/g' ~/.kube/config
 kubectl get nodes
 ```
 
-**Альтернатива: kubeadm (для production кластера)**
+**Альтернатива: kubeadm (Пропустите этот раздел, если используете k3s!)**
 
 Если нужен полноценный Kubernetes кластер:
 
@@ -240,7 +239,7 @@ helm version
 
 ### 5.1. Для k3s
 
-k3s включает встроенный local-path-provisioner, но для production рекомендуется использовать NFS или другой сетевой storage.
+k3s включает встроенный local-path-provisioner, но для production multi-node рекомендуется использовать NFS или другой сетевой storage.
 
 **Установка local-path-provisioner (уже включен в k3s):**
 
@@ -288,10 +287,63 @@ kubectl get storageclass
 
 Если планируете использовать Ingress (`ENABLE_INGRESS=true`):
 
-### 6.1. Установка NGINX Ingress Controller
+## Шаг 6: Установка Ingress Controller (опционально)
+
+Если планируете использовать Ingress (`ENABLE_INGRESS=true`):
+
+### 6.1. Для k3s: Использование встроенного Traefik (рекомендуется)
+
+**k3s включает Traefik Ingress Controller по умолчанию**, поэтому дополнительная установка не требуется.
+
+**Проверка, что Traefik работает:**
+```bash
+# Проверка сервиса Traefik
+kubectl get svc -n kube-system | grep traefik
+
+# Проверка подов Traefik
+kubectl get pods -n kube-system | grep traefik
+
+# Проверка IngressClass
+kubectl get ingressclass
+# Должен быть traefik**Настройка для использования Traefik:**
+
+При установке мониторинга установите класс Ingress как `traefik`:
+
+export INGRESS_CLASS=traefik**Преимущества использования Traefik в k3s:**
+- ✅ Уже установлен и настроен
+- ✅ Не требует дополнительных ресурсов
+- ✅ Проще в управлении
+- ✅ Автоматически обновляется с k3s
+
+**Если Traefik не работает или нужно отключить:**
+
+# Отключение Traefik (если нужно)
+# Отредактируйте /etc/rancher/k3s/config.yaml
+sudo nano /etc/rancher/k3s/config.yaml
+
+# Добавьте:
+# disable:
+#   - traefik
+
+# Перезапустите k3s
+sudo systemctl restart k3sПосле отключения Traefik используйте NGINX (см. раздел ниже).
+```
+
+---
+
+### 6.2. Установка NGINX Ingress Controller (альтернатива)
+
+**Когда использовать NGINX:**
+- Traefik отключен в k3s
+- Нужны специфичные функции NGINX
+- Используете kubeadm (нет встроенного Ingress Controller)
+- Предпочитаете NGINX по опыту
+
+**Установка NGINX Ingress Controller:**
+
+# Добавление Helm репозитория
 
 ```bash
-# Добавление Helm репозитория
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm repo update
 
@@ -310,20 +362,15 @@ kubectl wait --namespace ingress-nginx \
 
 # Проверка
 kubectl get svc -n ingress-nginx
-```
+**Настройка для использования NGINX:**
 
-**Для k3s (использование встроенного Traefik):**
+При установке мониторинга установите класс Ingress как `nginx`:
 
-k3s включает Traefik по умолчанию. Проверьте:
+export INGRESS_CLASS=nginx**Проверка IngressClass:**
+h
+kubectl get ingressclass
 
-```bash
-kubectl get svc -n kube-system | grep traefik
-```
-
-Если используете Traefik, установите класс Ingress как `traefik`:
-
-```bash
-export INGRESS_CLASS=traefik
+# Должен быть nginx (или traefik, если используете Traefik)
 ```
 
 ## Шаг 7: Установка cert-manager (опционально)
@@ -335,14 +382,88 @@ export INGRESS_CLASS=traefik
 helm repo add jetstack https://charts.jetstack.io
 helm repo update
 
+# Проверка, не установлен ли cert-manager уже
+helm list -n cert-manager
+kubectl get pods -n cert-manager 2>/dev/null || echo "Namespace не существует"
+
 # Установка cert-manager
 helm install cert-manager jetstack/cert-manager \
   --namespace cert-manager \
   --create-namespace \
   --set installCRDs=true \
   --set global.leaderElection.namespace=cert-manager
+```
 
-# Ожидание готовности
+**Если получили ошибку "exists and cannot be imported":**
+
+Эта ошибка означает, что в кластере уже есть ресурсы cert-manager, не созданные Helm. Решение:
+
+```bash
+# Вариант 1: Полная очистка и переустановка (рекомендуется)
+# 1. Удаление Helm release (если существует)
+helm uninstall cert-manager -n cert-manager 2>/dev/null || true
+
+# 2. Удаление namespace
+kubectl delete namespace cert-manager 2>/dev/null || true
+
+# 3. Удаление CRD (CustomResourceDefinition) - они существуют на уровне кластера
+kubectl delete crd -l app.kubernetes.io/name=cert-manager 2>/dev/null || true
+
+# Или удалите все CRD cert-manager вручную:
+kubectl delete crd certificates.cert-manager.io \
+  certificaterequests.cert-manager.io \
+  challenges.acme.cert-manager.io \
+  clusterissuers.cert-manager.io \
+  issuers.cert-manager.io \
+  orders.acme.cert-manager.io 2>/dev/null || true
+
+# 4. Удаление ClusterRole и ClusterRoleBinding (ресурсы уровня кластера)
+kubectl delete clusterrole,clusterrolebinding -l app.kubernetes.io/name=cert-manager 2>/dev/null || true
+
+# Или удалите вручную все ресурсы cert-manager на уровне кластера:
+kubectl delete clusterrole cert-manager-cainjector \
+  cert-manager-controller \
+  cert-manager-webhook:subjectaccessreviews 2>/dev/null || true
+
+kubectl delete clusterrolebinding cert-manager-cainjector \
+  cert-manager-controller \
+  cert-manager-webhook:subjectaccessreviews 2>/dev/null || true
+
+# 5. Удаление ServiceAccount из всех namespace (если остались)
+kubectl delete serviceaccount -l app.kubernetes.io/name=cert-manager --all-namespaces 2>/dev/null || true
+
+# 6. Удаление WebhookConfiguration (MutatingWebhookConfiguration и ValidatingWebhookConfiguration)
+kubectl delete mutatingwebhookconfiguration,validatingwebhookconfiguration -l app.kubernetes.io/name=cert-manager 2>/dev/null || true
+
+# Или удалите вручную:
+kubectl delete mutatingwebhookconfiguration cert-manager-webhook 2>/dev/null || true
+kubectl delete validatingwebhookconfiguration cert-manager-webhook 2>/dev/null || true
+
+# 7. Подождите несколько секунд
+sleep 5
+
+# 8. Установка заново
+helm install cert-manager jetstack/cert-manager \
+  --namespace cert-manager \
+  --create-namespace \
+  --set installCRDs=true \
+  --set global.leaderElection.namespace=cert-manager
+
+# Вариант 2: Если cert-manager уже установлен через Helm, используйте upgrade
+# helm upgrade cert-manager jetstack/cert-manager \
+#   --namespace cert-manager \
+#   --set installCRDs=true \
+#   --set global.leaderElection.namespace=cert-manager
+```
+
+**Важно**:
+- CRD (CustomResourceDefinition), ClusterRole, ClusterRoleBinding, MutatingWebhookConfiguration, ValidatingWebhookConfiguration существуют на уровне кластера, а не namespace
+- Они не удаляются при удалении namespace, их нужно удалять отдельно
+- Если ошибка повторяется, проверьте все ресурсы: `kubectl get all,clusterrole,clusterrolebinding,crd,mutatingwebhookconfiguration,validatingwebhookconfiguration -l app.kubernetes.io/name=cert-manager -A`
+
+**Ожидание готовности:**
+
+```bash
 kubectl wait --namespace cert-manager \
   --for=condition=ready pod \
   --selector=app.kubernetes.io/instance=cert-manager \
@@ -400,6 +521,50 @@ git pull origin main  # или master, в зависимости от вашей
 
 ### 9.1. Настройка параметров
 
+**Вариант 1: Использование .env файла (рекомендуется)**
+
+Создайте файл `.env` в корне репозитория:
+
+```bash
+cd ~/monitoring
+
+# Используйте готовый пример (если есть)
+cp .env.example .env
+
+# Или создайте .env файл вручную
+cat > .env << 'EOF'
+# Обязательные параметры
+DOMAIN=example.com
+GRAFANA_PASSWORD=secure_password
+
+# Опциональные параметры
+MONITORING_NAMESPACE=monitoring
+PROMETHEUS_RETENTION=15d
+PROMETHEUS_STORAGE=20Gi
+LOKI_RETENTION=744h
+LOKI_STORAGE=20Gi
+INSTALL_PORTAINER=false
+
+# Для Ingress (если настроили)
+ENABLE_INGRESS=true
+INGRESS_CLASS=nginx  # Или traefik для k3s
+ACME_EMAIL=admin@example.com  # Email для Let's Encrypt (опционально, по умолчанию: admin@${DOMAIN})
+EOF
+
+# Отредактируйте .env файл со своими значениями
+nano .env
+
+# Защита файла (содержит пароли!)
+chmod 600 .env
+
+# Загрузка переменных из .env перед запуском скрипта
+set -a
+source .env
+set +a
+```
+
+**Вариант 2: Экспорт переменных вручную**
+
 ```bash
 # Обязательные параметры
 export DOMAIN=example.com                    # Ваш домен
@@ -416,8 +581,10 @@ export INSTALL_PORTAINER=false
 # Для Ingress (если настроили)
 export ENABLE_INGRESS=true
 export INGRESS_CLASS=nginx  # Или traefik для k3s
-export MONITORING_DOMAIN=monitoring.example.com
+export ACME_EMAIL=admin@example.com  # Email для Let's Encrypt (опционально, по умолчанию: admin@${DOMAIN})
 ```
+
+**Рекомендация**: Используйте `.env` файл для удобства управления конфигурацией. Не забудьте добавить `.env` в `.gitignore`, чтобы не коммитить пароли!
 
 ### 9.2. Запуск установки
 
@@ -425,9 +592,16 @@ export MONITORING_DOMAIN=monitoring.example.com
 # Сделайте скрипт исполняемым
 chmod +x scripts/setup.sh
 
+# Если используете .env файл, загрузите переменные:
+set -a
+source .env
+set +a
+
 # Запуск установки
 ./scripts/setup.sh
 ```
+
+**Примечание**: Если вы использовали `export` для переменных, просто запустите `./scripts/setup.sh` без загрузки .env.
 
 ### 9.3. Проверка установки
 
@@ -456,14 +630,15 @@ kubectl get svc -n kube-system | grep traefik  # Для k3s Traefik
 **Добавьте DNS записи:**
 
 ```
-*.monitoring.example.com  A  <IP_INGRESS_CONTROLLER>
+*.example.com  A  <IP_INGRESS_CONTROLLER>
 ```
 
 Или отдельные записи:
 
 ```
-grafana.monitoring.example.com    A  <IP_INGRESS_CONTROLLER>
-prometheus.monitoring.example.com A  <IP_INGRESS_CONTROLLER>
+grafana.example.com    A  <IP_INGRESS_CONTROLLER>
+prometheus.example.com A  <IP_INGRESS_CONTROLLER>
+portainer.example.com  A  <IP_INGRESS_CONTROLLER>
 ```
 
 ## Шаг 11: Первый вход в Grafana
@@ -472,7 +647,7 @@ prometheus.monitoring.example.com A  <IP_INGRESS_CONTROLLER>
 
 ```bash
 # Откройте в браузере
-https://grafana.monitoring.example.com
+https://grafana.example.com
 ```
 
 ### 11.2. Через port-forward (для тестирования)
@@ -564,23 +739,110 @@ kubectl describe ingress -n monitoring <ingress-name>
 kubectl logs -n ingress-nginx <ingress-controller-pod>
 ```
 
-### Проблема: Сертификаты не выдаются
+### Проблема: Ошибка при установке cert-manager
+
+**Проблема 1**: `Error: INSTALLATION FAILED: Unable to continue with install: ServiceAccount "cert-manager-cainjector" in namespace "cert-manager" exists and cannot be imported`
+
+**Проблема 2**: `Error: INSTALLATION FAILED: Unable to continue with install: CustomResourceDefinition "challenges.acme.cert-manager.io" in namespace "" exists and cannot be imported`
+
+**Проблема 3**: `Error: INSTALLATION FAILED: Unable to continue with install: ClusterRole "cert-manager-cainjector" in namespace "" exists and cannot be imported`
+
+**Проблема 4**: `Error: INSTALLATION FAILED: Unable to continue with install: MutatingWebhookConfiguration "cert-manager-webhook" in namespace "" exists and cannot be imported`
+
+**Решение**:
+Это означает, что в кластере уже есть ресурсы cert-manager, не созданные Helm. Выполните полную очистку:
 
 ```bash
-# Проверка cert-manager
-kubectl get pods -n cert-manager
+# 1. Удаление Helm release (если существует)
+helm uninstall cert-manager -n cert-manager 2>/dev/null || true
 
-# Проверка ClusterIssuer
-kubectl get clusterissuer
-kubectl describe clusterissuer letsencrypt-prod
+# 2. Удаление namespace
+kubectl delete namespace cert-manager 2>/dev/null || true
 
-# Проверка Certificate
-kubectl get certificate -n monitoring
-kubectl describe certificate -n monitoring <cert-name>
+# 3. Удаление CRD (CustomResourceDefinition) - они существуют на уровне кластера
+kubectl delete crd -l app.kubernetes.io/name=cert-manager 2>/dev/null || true
 
-# Проверка Challenge
-kubectl get challenges -n monitoring
+# Или удалите все CRD cert-manager вручную:
+kubectl delete crd certificates.cert-manager.io \
+  certificaterequests.cert-manager.io \
+  challenges.acme.cert-manager.io \
+  clusterissuers.cert-manager.io \
+  issuers.cert-manager.io \
+  orders.acme.cert-manager.io 2>/dev/null || true
+
+# 4. Удаление ClusterRole и ClusterRoleBinding (ресурсы уровня кластера)
+kubectl delete clusterrole,clusterrolebinding -l app.kubernetes.io/name=cert-manager 2>/dev/null || true
+
+# Или удалите вручную все ресурсы cert-manager на уровне кластера:
+kubectl delete clusterrole cert-manager-cainjector \
+  cert-manager-controller \
+  cert-manager-webhook:subjectaccessreviews 2>/dev/null || true
+
+kubectl delete clusterrolebinding cert-manager-cainjector \
+  cert-manager-controller \
+  cert-manager-webhook:subjectaccessreviews 2>/dev/null || true
+
+# 5. Удаление ServiceAccount из всех namespace (если остались)
+kubectl delete serviceaccount -l app.kubernetes.io/name=cert-manager --all-namespaces 2>/dev/null || true
+
+# 6. Удаление WebhookConfiguration (MutatingWebhookConfiguration и ValidatingWebhookConfiguration)
+kubectl delete mutatingwebhookconfiguration,validatingwebhookconfiguration -l app.kubernetes.io/name=cert-manager 2>/dev/null || true
+
+# Или удалите вручную:
+kubectl delete mutatingwebhookconfiguration cert-manager-webhook 2>/dev/null || true
+kubectl delete validatingwebhookconfiguration cert-manager-webhook 2>/dev/null || true
+
+# 7. Проверка всех оставшихся ресурсов (опционально)
+# kubectl get all,clusterrole,clusterrolebinding,crd,mutatingwebhookconfiguration,validatingwebhookconfiguration -l app.kubernetes.io/name=cert-manager -A
+
+# 8. Подождите несколько секунд
+sleep 5
+
+# 9. Установка заново
+helm install cert-manager jetstack/cert-manager \
+  --namespace cert-manager \
+  --create-namespace \
+  --set installCRDs=true \
+  --set global.leaderElection.namespace=cert-manager
 ```
+
+**Важно**:
+- CRD (CustomResourceDefinition), ClusterRole, ClusterRoleBinding, MutatingWebhookConfiguration, ValidatingWebhookConfiguration существуют на уровне кластера, а не namespace
+- Они не удаляются при удалении namespace, их нужно удалять отдельно
+- Если ошибка повторяется, проверьте все ресурсы: `kubectl get all,clusterrole,clusterrolebinding,crd,mutatingwebhookconfiguration,validatingwebhookconfiguration -l app.kubernetes.io/name=cert-manager -A`
+
+### Проблема: Сертификаты не выдаются
+
+**Проблема**: Certificate в статусе `Pending` или `Failed`
+
+**Решение**:
+1. Проверьте cert-manager:
+   ```bash
+   kubectl get pods -n cert-manager
+   # Все поды должны быть Running
+   ```
+
+   Если поды не запускаются, см. решение выше.
+
+2. Проверьте ClusterIssuer:
+   ```bash
+   kubectl get clusterissuer
+   kubectl describe clusterissuer letsencrypt-prod
+   # Статус должен быть Ready
+   ```
+
+3. Проверьте события:
+   ```bash
+   kubectl describe certificate -n monitoring <cert-name>
+   kubectl get events -n monitoring --sort-by='.lastTimestamp'
+   kubectl logs -n cert-manager -l app=cert-manager
+   ```
+
+4. Проверьте Challenge ресурсы:
+   ```bash
+   kubectl get challenges -n monitoring
+   kubectl describe challenge -n monitoring <challenge-name>
+   ```
 
 ## Оптимизация для production
 

@@ -143,7 +143,7 @@ monitoring/
 - `INSTALL_PORTAINER` - установить Portainer (по умолчанию: false)
 - `ENABLE_INGRESS` - включить Ingress для сервисов (по умолчанию: false)
 - `INGRESS_CLASS` - класс Ingress Controller (по умолчанию: nginx)
-- `MONITORING_DOMAIN` - домен для мониторинга (по умолчанию: monitoring.${DOMAIN})
+- `ACME_EMAIL` - email для Let's Encrypt (опционально, по умолчанию: admin@${DOMAIN})
 
 ## Проверка статуса
 

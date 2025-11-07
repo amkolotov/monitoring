@@ -59,7 +59,7 @@ export LOKI_STORAGE=20Gi                    # Размер хранилища
 export INSTALL_PORTAINER=false             # Установить Portainer
 export ENABLE_INGRESS=true                  # Включить Ingress (рекомендуется)
 export INGRESS_CLASS=nginx                  # Класс Ingress Controller
-export MONITORING_DOMAIN=monitoring.example.com  # Домен для мониторинга
+export ACME_EMAIL=admin@example.com         # Email для Let's Encrypt (опционально)
 ```
 <｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
 read_file
@@ -112,18 +112,18 @@ Ingress создаются автоматически при установке.
 
 2. **Настройте DNS записи**:
    ```
-   *.monitoring.example.com  A  <IP_INGRESS_CONTROLLER>
+   *.example.com  A  <IP_INGRESS_CONTROLLER>
    ```
    Или отдельные записи:
    ```
-   grafana.monitoring.example.com    A  <IP_INGRESS_CONTROLLER>
-   prometheus.monitoring.example.com A  <IP_INGRESS_CONTROLLER>
-   portainer.monitoring.example.com   A  <IP_INGRESS_CONTROLLER>
+   grafana.example.com    A  <IP_INGRESS_CONTROLLER>
+   prometheus.example.com A  <IP_INGRESS_CONTROLLER>
+   portainer.example.com  A  <IP_INGRESS_CONTROLLER>
    ```
 
 3. **Проверьте доступность**:
    ```bash
-   curl -I https://grafana.monitoring.example.com
+   curl -I https://grafana.example.com
    ```
 
 **Подробная инструкция**: См. [Настройка Ingress](docs/ingress-setup.md)
@@ -144,7 +144,7 @@ kubectl port-forward -n monitoring svc/loki 3100:3100
 ### Шаг 6: Первый вход в Grafana
 
 1. Откройте Grafana в браузере:
-   - Через Ingress (если `ENABLE_INGRESS=true`): `https://grafana.${MONITORING_DOMAIN}`
+   - Через Ingress (если `ENABLE_INGRESS=true`): `https://grafana.${DOMAIN}`
    - Через port-forward: `http://localhost:3000`
 
 2. Войдите с учетными данными:

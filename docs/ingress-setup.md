@@ -29,21 +29,21 @@
 
 **Структура:**
 ```
-grafana.<monitoring-domain>      → Grafana UI
-prometheus.<monitoring-domain>   → Prometheus UI
-portainer.<monitoring-domain>    → Portainer UI
+grafana.<domain>      → Grafana UI
+prometheus.<domain>   → Prometheus UI
+portainer.<domain>    → Portainer UI
 ```
 
 **Пример:**
 ```
-grafana.monitoring.example.com
-prometheus.monitoring.example.com
-portainer.monitoring.example.com
+grafana.example.com
+prometheus.example.com
+portainer.example.com
 ```
 
 **Преимущества:**
 - Понятная и логичная структура
-- Легко настраивать DNS (одна A-запись для `*.monitoring.example.com`)
+- Легко настраивать DNS (одна A-запись для `*.example.com`)
 - Можно выдавать отдельные сертификаты для каждого сервиса
 - Удобно для разных уровней доступа
 
@@ -172,7 +172,7 @@ export DOMAIN=example.com
 export GRAFANA_PASSWORD=secure_password
 export ENABLE_INGRESS=true
 export INGRESS_CLASS=nginx  # Или traefik, зависит от вашего Ingress Controller
-export MONITORING_DOMAIN=monitoring.example.com  # Опционально, по умолчанию: monitoring.${DOMAIN}
+export ACME_EMAIL=admin@example.com  # Email для Let's Encrypt (опционально, по умолчанию: admin@${DOMAIN})
 ```
 
 ### Шаг 2: Запуск установки
@@ -192,14 +192,14 @@ export MONITORING_DOMAIN=monitoring.example.com  # Опционально, по 
 
 **Вариант 1: Wildcard запись (рекомендуется)**
 ```
-*.monitoring.example.com  A  <IP_INGRESS_CONTROLLER>
+*.example.com  A  <IP_INGRESS_CONTROLLER>
 ```
 
 **Вариант 2: Отдельные записи**
 ```
-grafana.monitoring.example.com    A  <IP_INGRESS_CONTROLLER>
-prometheus.monitoring.example.com A  <IP_INGRESS_CONTROLLER>
-portainer.monitoring.example.com  A  <IP_INGRESS_CONTROLLER>
+grafana.example.com    A  <IP_INGRESS_CONTROLLER>
+prometheus.example.com A  <IP_INGRESS_CONTROLLER>
+portainer.example.com  A  <IP_INGRESS_CONTROLLER>
 ```
 
 ### Шаг 4: Проверка
@@ -212,8 +212,8 @@ kubectl get ingress -n monitoring
 kubectl get certificate -n monitoring
 
 # Проверка доступности
-curl -I https://grafana.monitoring.example.com
-curl -I https://prometheus.monitoring.example.com
+curl -I https://grafana.example.com
+curl -I https://prometheus.example.com
 ```
 
 ## Параметры установки
@@ -244,15 +244,17 @@ export INGRESS_CLASS=nginx  # Или traefik, istio, и т.д.
 - `istio` - Istio Gateway
 - Другие классы, установленные в кластере
 
-### MONITORING_DOMAIN
+### ACME_EMAIL
 
-Домен для сервисов мониторинга.
+Email для Let's Encrypt сертификатов.
 
 ```bash
-export MONITORING_DOMAIN=monitoring.example.com
+export ACME_EMAIL=admin@example.com
 ```
 
-**По умолчанию**: `monitoring.${DOMAIN}`
+**По умолчанию**: `admin@${DOMAIN}`
+
+**Важно**: Рекомендуется указать явно для получения уведомлений от Let's Encrypt.
 
 ## Безопасность
 
@@ -335,21 +337,21 @@ kubectl describe certificate -n monitoring
 
 ```bash
 # Grafana
-curl -I https://grafana.${MONITORING_DOMAIN}
+curl -I https://grafana.${DOMAIN}
 
 # Prometheus
-curl -I https://prometheus.${MONITORING_DOMAIN}
+curl -I https://prometheus.${DOMAIN}
 
 # Portainer (если установлен)
-curl -I https://portainer.${MONITORING_DOMAIN}
+curl -I https://portainer.${DOMAIN}
 ```
 
 ### 4. Проверка DNS
 
 ```bash
 # Проверка разрешения DNS
-nslookup grafana.${MONITORING_DOMAIN}
-nslookup prometheus.${MONITORING_DOMAIN}
+nslookup grafana.${DOMAIN}
+nslookup prometheus.${DOMAIN}
 ```
 
 ## Troubleshooting
@@ -414,7 +416,7 @@ nslookup prometheus.${MONITORING_DOMAIN}
 **Решение**:
 1. Проверьте DNS записи:
    ```bash
-   nslookup grafana.${MONITORING_DOMAIN}
+   nslookup grafana.${DOMAIN}
    ```
 2. Проверьте IP Ingress Controller:
    ```bash
@@ -448,7 +450,7 @@ nslookup prometheus.${MONITORING_DOMAIN}
 2. Запустите scripts/setup.sh снова:
    ```bash
    export ENABLE_INGRESS=true
-   export MONITORING_DOMAIN=new-domain.example.com
+   export DOMAIN=new-domain.example.com
    ./scripts/setup.sh
    ```
 
@@ -493,7 +495,7 @@ prometheus:
 grafana:
   ingress:
     hosts:
-      - monitoring.example.com
+      - example.com
     paths:
       - path: /grafana
         pathType: Prefix

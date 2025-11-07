@@ -90,7 +90,7 @@ prometheus:
     enabled: false  # Включается через переменную ENABLE_INGRESS
     ingressClassName: nginx  # Настраивается через переменную INGRESS_CLASS
     hosts:
-      - prometheus.PLACEHOLDER_DOMAIN  # Заменяется в setup.sh
+      - prometheus.PLACEHOLDER_DOMAIN  # Заменяется на ${DOMAIN} в setup.sh
     annotations:
       cert-manager.io/cluster-issuer: letsencrypt-prod
       # Ограничение доступа (раскомментировать при необходимости)
@@ -101,7 +101,7 @@ prometheus:
     tls:
       - secretName: prometheus-tls
         hosts:
-          - prometheus.PLACEHOLDER_DOMAIN  # Заменяется в setup.sh
+          - prometheus.PLACEHOLDER_DOMAIN  # Заменяется на ${DOMAIN} в setup.sh
 
 # Настройки Alertmanager
 alertmanager:
@@ -163,14 +163,14 @@ grafana:
     enabled: false  # Включается через переменную ENABLE_INGRESS
     ingressClassName: nginx  # Настраивается через переменную INGRESS_CLASS
     hosts:
-      - grafana.PLACEHOLDER_DOMAIN  # Заменяется в setup.sh
+      - grafana.PLACEHOLDER_DOMAIN  # Заменяется на ${DOMAIN} в setup.sh
     annotations:
       cert-manager.io/cluster-issuer: letsencrypt-prod
       # Аутентификация настраивается внутри Grafana
     tls:
       - secretName: grafana-tls
         hosts:
-          - grafana.PLACEHOLDER_DOMAIN  # Заменяется в setup.sh
+          - grafana.PLACEHOLDER_DOMAIN  # Заменяется на ${DOMAIN} в setup.sh
 
 # Node Exporter
 nodeExporter:

@@ -37,14 +37,14 @@ portainer:
       # Ограничение доступа (раскомментировать при необходимости)
       # nginx.ingress.kubernetes.io/whitelist-source-range: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
     hosts:
-      - host: portainer.PLACEHOLDER_DOMAIN  # Заменяется в setup.sh
+      - host: portainer.PLACEHOLDER_DOMAIN  # Заменяется на ${DOMAIN} в setup.sh
         paths:
           - path: /
             pathType: Prefix
     tls:
       - secretName: portainer-tls
         hosts:
-          - portainer.PLACEHOLDER_DOMAIN  # Заменяется в setup.sh
+          - portainer.PLACEHOLDER_DOMAIN  # Заменяется на ${DOMAIN} в setup.sh
 
   # Persistence для хранения данных
   persistence:

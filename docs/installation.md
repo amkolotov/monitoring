@@ -110,7 +110,7 @@ kubectl get pods -n monitoring
 ```bash
 export ENABLE_INGRESS=true
 export INGRESS_CLASS=nginx  # Или traefik, зависит от вашего Ingress Controller
-export MONITORING_DOMAIN=monitoring.example.com  # Опционально, по умолчанию: monitoring.${DOMAIN}
+export ACME_EMAIL=admin@example.com  # Email для Let's Encrypt (опционально, по умолчанию: admin@${DOMAIN})
 ./scripts/setup.sh
 ```
 
@@ -148,14 +148,14 @@ kubectl port-forward -n monitoring svc/loki 3100:3100
 
 **Вариант 1: Wildcard запись (рекомендуется)**
 ```
-*.monitoring.example.com  A  <IP_INGRESS_CONTROLLER>
+*.example.com  A  <IP_INGRESS_CONTROLLER>
 ```
 
 **Вариант 2: Отдельные записи**
 ```
-grafana.monitoring.example.com    A  <IP_INGRESS_CONTROLLER>
-prometheus.monitoring.example.com A  <IP_INGRESS_CONTROLLER>
-portainer.monitoring.example.com  A  <IP_INGRESS_CONTROLLER>
+grafana.example.com    A  <IP_INGRESS_CONTROLLER>
+prometheus.example.com A  <IP_INGRESS_CONTROLLER>
+portainer.example.com  A  <IP_INGRESS_CONTROLLER>
 ```
 
 **Подробная инструкция**: См. [Настройка Ingress](ingress-setup.md)
