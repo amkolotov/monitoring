@@ -30,13 +30,14 @@ loki:
             period: 24h
 
     # Настройки storage
+    # Пути должны соответствовать пути монтирования PVC (обычно /data)
     storage_config:
       boltdb_shipper:
-        active_index_directory: /loki/index
-        cache_location: /loki/cache
+        active_index_directory: /data/index
+        cache_location: /data/cache
         shared_store: filesystem
       filesystem:
-        directory: /loki/chunks
+        directory: /data/chunks
 
     # Лимиты
     limits_config:
