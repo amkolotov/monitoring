@@ -86,23 +86,10 @@ prometheus:
     serviceMonitor:
       enabled: true
 
-  # Ingress для Prometheus
+  # Ingress для Prometheus отключен по умолчанию (безопасность)
+  # Prometheus доступен только через Grafana или port-forward
   ingress:
-    enabled: false  # Включается через переменную ENABLE_INGRESS
-    ingressClassName: nginx  # Настраивается через переменную INGRESS_CLASS
-    hosts:
-      - prometheus.PLACEHOLDER_DOMAIN  # Заменяется на ${DOMAIN} в setup.sh
-    annotations:
-      cert-manager.io/cluster-issuer: letsencrypt-prod
-      # Ограничение доступа (раскомментировать при необходимости)
-      # nginx.ingress.kubernetes.io/whitelist-source-range: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
-      # Или базовая аутентификация
-      # nginx.ingress.kubernetes.io/auth-type: basic
-      # nginx.ingress.kubernetes.io/auth-secret: prometheus-auth
-    tls:
-      - secretName: prometheus-tls
-        hosts:
-          - prometheus.PLACEHOLDER_DOMAIN  # Заменяется на ${DOMAIN} в setup.sh
+    enabled: false  # Всегда отключен - доступ только через Grafana
 
 # Настройки Alertmanager
 alertmanager:

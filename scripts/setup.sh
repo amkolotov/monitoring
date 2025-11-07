@@ -181,14 +181,21 @@ sed -i '/- name: Loki/,/editable:/ {
     /isDefault:/ s/isDefault: true/isDefault: false/
 }' "${PROMETHEUS_VALUES_TMP}"
 
-# Замена для Ingress (если включен)
+# Замена для Ingress (если включен) - только для Grafana
+# Prometheus Ingress отключен по умолчанию для безопасности
 if [ "$ENABLE_INGRESS" == "true" ]; then
-  log_info "Настройка Ingress для Prometheus и Grafana..."
+  log_info "Настройка Ingress для Grafana..."
   sed -i \
     -e "s|PLACEHOLDER_DOMAIN|${DOMAIN}|g" \
     -e "s|ingressClassName: nginx|ingressClassName: ${INGRESS_CLASS}|g" \
     -e "s|enabled: false  # Включается через переменную ENABLE_INGRESS|enabled: true|g" \
     "${PROMETHEUS_VALUES_TMP}"
+  # Убеждаемся, что Prometheus Ingress отключен
+  sed -i '/prometheus:/,/^[[:space:]]*[a-zA-Z-]/ {
+    /ingress:/,/^[[:space:]]*[a-zA-Z-]/ {
+      /enabled:/ s/enabled: true/enabled: false/
+    }
+  }' "${PROMETHEUS_VALUES_TMP}" 2>/dev/null || true
 fi
 
 # Loki values
@@ -450,14 +457,20 @@ if [ "$ENABLE_INGRESS" == "true" ]; then
   log_info ""
   log_info "URL сервисов мониторинга:"
   log_info "  Grafana:    https://grafana.${DOMAIN}"
-  log_info "  Prometheus: https://prometheus.${DOMAIN}"
+  log_info "  Prometheus: доступен только через Grafana (безопасность)"
   if [ "$INSTALL_PORTAINER" == "true" ]; then
     log_info "  Portainer:  https://portainer.${DOMAIN}"
   fi
   log_info ""
   log_info "ВАЖНО: Настройте DNS записи:"
-  log_info "  *.${DOMAIN} → IP вашего Ingress Controller"
-  log_info "  Или отдельные A-записи для каждого поддомена"
+  log_info "  grafana.${DOMAIN} → IP вашего Ingress Controller"
+  if [ "$INSTALL_PORTAINER" == "true" ]; then
+    log_info "  portainer.${DOMAIN} → IP вашего Ingress Controller"
+  fi
+  log_info ""
+  log_info "Примечание: Prometheus доступен только через Grafana для безопасности."
+  log_info "Для прямого доступа используйте port-forward:"
+  log_info "  kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:9090"
 fi
 
 log_info ""
