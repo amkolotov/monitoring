@@ -494,8 +494,19 @@ metadata:
   labels:
     app.kubernetes.io/name: portainer
 rules:
+  # Явные права на все основные ресурсы
   - apiGroups: [""]
-    resources: ["*"]
+    resources:
+      - "*"
+      - namespaces
+      - nodes
+      - pods
+      - services
+      - endpoints
+      - configmaps
+      - secrets
+      - persistentvolumes
+      - persistentvolumeclaims
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["apps"]
     resources: ["*"]
@@ -518,6 +529,19 @@ rules:
   - apiGroups: ["metrics.k8s.io"]
     resources: ["*"]
     verbs: ["get", "list"]
+  # Дополнительные API группы для полного доступа
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["policy"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["autoscaling"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
 EOF
 
         # Создание или обновление ClusterRoleBinding для реального ServiceAccount
