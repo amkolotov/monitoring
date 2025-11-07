@@ -131,12 +131,15 @@ grafana:
   adminPassword: admin  # ВАЖНО: измените пароль после установки!
 
   # Исправление для busybox (решение проблемы с Docker Hub rate limit)
+  # Используем альтернативный registry или отключаем, если PVC уже существует
   initChownData:
-    enabled: true
-    image:
-      repository: busybox
-      registry: docker.io
-      tag: "1.36.1"  # Более новая версия для избежания rate limit
+    enabled: false  # Отключено, т.к. PVC уже существует с правильными правами
+    # Альтернативный вариант (если нужно включить):
+    # enabled: true
+    # image:
+    #   repository: quay.io/prometheus/busybox
+    #   registry: ""
+    #   tag: "latest"
 
   persistence:
     enabled: true
@@ -159,12 +162,13 @@ grafana:
           type: prometheus
           access: proxy
           url: http://prometheus-kube-prometheus-prometheus:9090
-          isDefault: true
+          isDefault: true  # Только Prometheus помечен как default
           editable: true
         - name: Loki
           type: loki
           access: proxy
           url: http://loki:3100
+          isDefault: false  # Исправлено: убран isDefault для Loki
           editable: true
 
   # Ingress для Grafana
