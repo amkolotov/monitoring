@@ -194,42 +194,99 @@ HELM_WAIT_ARGS=""
 if [ "$HELM_WAIT" == "true" ]; then
     HELM_WAIT_ARGS="--wait --timeout 10m"
     log_info "Ожидание готовности подов включено (таймаут: 10 минут)"
+    log_info "Если установка зависает, прервите (Ctrl+C) и запустите с HELM_WAIT=false"
 else
+    HELM_WAIT_ARGS="--timeout 5m"
     log_warn "Ожидание готовности подов отключено (HELM_WAIT=false)"
     log_warn "Проверьте статус подов вручную после установки"
 fi
 
 if helm list -n "${MONITORING_NAMESPACE}" | grep -q "^kube-prometheus-stack"; then
     log_warn "Prometheus уже установлен, выполняется обновление..."
-    if helm upgrade kube-prometheus-stack prometheus-community/kube-prometheus-stack \
-        -n "${MONITORING_NAMESPACE}" \
-        -f "${PROMETHEUS_VALUES_TMP}" \
-        ${HELM_WAIT_ARGS}; then
+    log_info "Это может занять несколько минут..."
+
+    # Запускаем upgrade в фоне и показываем прогресс
+    if [ "$HELM_WAIT" == "true" ]; then
+        # С таймаутом показываем прогресс подов
+        (
+            helm upgrade kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+                -n "${MONITORING_NAMESPACE}" \
+                -f "${PROMETHEUS_VALUES_TMP}" \
+                ${HELM_WAIT_ARGS} &
+            HELM_PID=$!
+
+            # Показываем прогресс каждые 10 секунд
+            while kill -0 $HELM_PID 2>/dev/null; do
+                sleep 10
+                log_info "Ожидание готовности подов... (проверка статуса)"
+                kubectl get pods -n "${MONITORING_NAMESPACE}" -l app.kubernetes.io/name=prometheus,app.kubernetes.io/name=grafana,app.kubernetes.io/name=prometheus-operator 2>/dev/null | head -5 || true
+            done
+            wait $HELM_PID
+        )
+        HELM_EXIT=$?
+    else
+        helm upgrade kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+            -n "${MONITORING_NAMESPACE}" \
+            -f "${PROMETHEUS_VALUES_TMP}" \
+            ${HELM_WAIT_ARGS}
+        HELM_EXIT=$?
+    fi
+
+    if [ $HELM_EXIT -eq 0 ]; then
         log_info "Prometheus успешно обновлен"
     else
-        log_error "Ошибка при обновлении Prometheus"
+        log_error "Ошибка при обновлении Prometheus (код: $HELM_EXIT)"
         log_info "Проверьте статус подов:"
         check_pods_status "${MONITORING_NAMESPACE}" "app.kubernetes.io/name=prometheus"
         log_info "Проверьте события:"
         kubectl get events -n "${MONITORING_NAMESPACE}" --sort-by='.lastTimestamp' | tail -20
+        if [ "$HELM_WAIT" == "true" ]; then
+            log_warn "Попробуйте запустить с HELM_WAIT=false для диагностики"
+        fi
         exit 1
     fi
 else
     log_info "Выполняется установка Prometheus (это может занять несколько минут)..."
-    if helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
-        -n "${MONITORING_NAMESPACE}" \
-        -f "${PROMETHEUS_VALUES_TMP}" \
-        --create-namespace \
-        ${HELM_WAIT_ARGS}; then
+
+    if [ "$HELM_WAIT" == "true" ]; then
+        (
+            helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+                -n "${MONITORING_NAMESPACE}" \
+                -f "${PROMETHEUS_VALUES_TMP}" \
+                --create-namespace \
+                ${HELM_WAIT_ARGS} &
+            HELM_PID=$!
+
+            while kill -0 $HELM_PID 2>/dev/null; do
+                sleep 10
+                log_info "Ожидание готовности подов... (проверка статуса)"
+                kubectl get pods -n "${MONITORING_NAMESPACE}" -l app.kubernetes.io/name=prometheus,app.kubernetes.io/name=grafana,app.kubernetes.io/name=prometheus-operator 2>/dev/null | head -5 || true
+            done
+            wait $HELM_PID
+        )
+        HELM_EXIT=$?
+    else
+        helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+            -n "${MONITORING_NAMESPACE}" \
+            -f "${PROMETHEUS_VALUES_TMP}" \
+            --create-namespace \
+            ${HELM_WAIT_ARGS}
+        HELM_EXIT=$?
+    fi
+
+    if [ $HELM_EXIT -eq 0 ]; then
         log_info "Prometheus успешно установлен"
     else
-        log_error "Ошибка при установке Prometheus"
+        log_error "Ошибка при установке Prometheus (код: $HELM_EXIT)"
         log_info "Проверьте статус подов:"
         check_pods_status "${MONITORING_NAMESPACE}" "app.kubernetes.io/name=prometheus"
         log_info "Проверьте PVC:"
         kubectl get pvc -n "${MONITORING_NAMESPACE}"
         log_info "Проверьте события:"
         kubectl get events -n "${MONITORING_NAMESPACE}" --sort-by='.lastTimestamp' | tail -20
+        if [ "$HELM_WAIT" == "true" ]; then
+            log_warn "Попробуйте запустить с HELM_WAIT=false для диагностики"
+        fi
         exit 1
     fi
 fi
