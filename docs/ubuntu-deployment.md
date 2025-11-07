@@ -549,6 +549,8 @@ INSTALL_PORTAINER=false
 ENABLE_INGRESS=true
 INGRESS_CLASS=nginx  # Или traefik для k3s
 ACME_EMAIL=admin@example.com  # Email для Let's Encrypt (опционально, по умолчанию: admin@${DOMAIN})
+
+HELM_WAIT=true
 EOF
 
 # Отредактируйте .env файл со своими значениями
@@ -582,6 +584,7 @@ export INSTALL_PORTAINER=false
 export ENABLE_INGRESS=true
 export INGRESS_CLASS=nginx  # Или traefik для k3s
 export ACME_EMAIL=admin@example.com  # Email для Let's Encrypt (опционально, по умолчанию: admin@${DOMAIN})
+export HELM_WAIT=true
 ```
 
 **Рекомендация**: Используйте `.env` файл для удобства управления конфигурацией. Не забудьте добавить `.env` в `.gitignore`, чтобы не коммитить пароли!
