@@ -76,6 +76,42 @@ portainer:
     runAsUser: 1000
     fsGroup: 1000
 
+  # ServiceAccount для доступа к Kubernetes API
+  serviceAccount:
+    create: true
+    name: portainer
+    annotations: {}
+
+  # RBAC для доступа к ресурсам Kubernetes
+  rbac:
+    create: true
+    # ClusterRole с правами на чтение и управление ресурсами
+    rules:
+      - apiGroups: [""]
+        resources: ["*"]
+        verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+      - apiGroups: ["apps"]
+        resources: ["*"]
+        verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+      - apiGroups: ["batch"]
+        resources: ["*"]
+        verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+      - apiGroups: ["extensions"]
+        resources: ["*"]
+        verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+      - apiGroups: ["networking.k8s.io"]
+        resources: ["*"]
+        verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+      - apiGroups: ["storage.k8s.io"]
+        resources: ["*"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: ["rbac.authorization.k8s.io"]
+        resources: ["*"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: ["metrics.k8s.io"]
+        resources: ["*"]
+        verbs: ["get", "list"]
+
 # Portainer Agent (для удаленного управления Docker серверами)
 portainerAgent:
   enabled: false  # Включается отдельно на серверах приложений

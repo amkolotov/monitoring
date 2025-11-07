@@ -205,6 +205,14 @@ sed -e "s|retention_period: 744h|retention_period: ${LOKI_RETENTION}|g" \
     -e "s|size: 20Gi|size: ${LOKI_STORAGE}|g" \
     "${LOKI_VALUES}" > "${LOKI_VALUES_TMP}"
 
+# Исправление путей хранилища Loki (должны соответствовать пути монтирования PVC /data)
+log_info "Исправление путей хранилища Loki..."
+sed -i \
+    -e 's|directory: /loki/chunks|directory: /data/chunks|g' \
+    -e 's|active_index_directory: /loki/index|active_index_directory: /data/index|g' \
+    -e 's|cache_location: /loki/cache|cache_location: /data/cache|g' \
+    "${LOKI_VALUES_TMP}"
+
 # Функция для проверки статуса подов
 check_pods_status() {
     local namespace=$1
@@ -349,6 +357,19 @@ else
     fi
 fi
 
+# Исправление ConfigMap для Grafana datasource (убираем isDefault: true у Loki)
+log_info "Исправление ConfigMap для Loki datasource..."
+if kubectl get configmap loki-loki-stack -n "${MONITORING_NAMESPACE}" >/dev/null 2>&1; then
+    log_info "Обнаружен ConfigMap loki-loki-stack, исправляем isDefault..."
+    kubectl get configmap loki-loki-stack -n "${MONITORING_NAMESPACE}" -o yaml | \
+        sed 's/isDefault: true/isDefault: false/g' | \
+        kubectl apply -f - >/dev/null 2>&1 || log_warn "Не удалось обновить ConfigMap (может быть защищен)"
+
+    # Перезапускаем под Grafana для применения изменений
+    log_info "Перезапуск подов Grafana для применения исправлений datasource..."
+    kubectl delete pods -n "${MONITORING_NAMESPACE}" -l app.kubernetes.io/name=grafana --wait=false 2>/dev/null || true
+fi
+
 # Установка Portainer (опционально)
 if [ "$INSTALL_PORTAINER" == "true" ]; then
     log_info "Установка Portainer..."
@@ -434,6 +455,84 @@ if [ "$INSTALL_PORTAINER" == "true" ]; then
                 exit 1
             fi
         fi
+    fi
+
+    # Проверка и создание RBAC ресурсов для Portainer (если Helm chart не создал)
+    log_info "Проверка RBAC для Portainer..."
+    if ! kubectl get clusterrole portainer -n "${MONITORING_NAMESPACE}" >/dev/null 2>&1; then
+        log_info "Создание ClusterRole для Portainer..."
+        kubectl apply -f - <<EOF
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: portainer
+  labels:
+    app.kubernetes.io/name: portainer
+rules:
+  - apiGroups: [""]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["extensions"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["*"]
+    verbs: ["get", "list"]
+EOF
+    fi
+
+    # Проверка и создание ClusterRoleBinding
+    if ! kubectl get clusterrolebinding portainer >/dev/null 2>&1; then
+        log_info "Создание ClusterRoleBinding для Portainer..."
+        SERVICE_ACCOUNT="portainer"
+        if ! kubectl get serviceaccount "${SERVICE_ACCOUNT}" -n "${MONITORING_NAMESPACE}" >/dev/null 2>&1; then
+            log_info "Создание ServiceAccount для Portainer..."
+            kubectl create serviceaccount "${SERVICE_ACCOUNT}" -n "${MONITORING_NAMESPACE}" 2>/dev/null || true
+        fi
+
+        kubectl apply -f - <<EOF
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: portainer
+  labels:
+    app.kubernetes.io/name: portainer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: portainer
+subjects:
+  - kind: ServiceAccount
+    name: ${SERVICE_ACCOUNT}
+    namespace: ${MONITORING_NAMESPACE}
+EOF
+    fi
+
+    # Обновление Deployment Portainer для использования ServiceAccount
+    log_info "Обновление Deployment Portainer для использования ServiceAccount..."
+    if kubectl get deployment portainer -n "${MONITORING_NAMESPACE}" >/dev/null 2>&1; then
+        kubectl patch deployment portainer -n "${MONITORING_NAMESPACE}" \
+            -p '{"spec":{"template":{"spec":{"serviceAccountName":"portainer"}}}}' \
+            >/dev/null 2>&1 || log_warn "Не удалось обновить ServiceAccount в Deployment (может быть уже установлен)"
+
+        # Перезапуск подов Portainer для применения изменений
+        log_info "Перезапуск подов Portainer для применения RBAC изменений..."
+        kubectl rollout restart deployment portainer -n "${MONITORING_NAMESPACE}" >/dev/null 2>&1 || true
     fi
 
     rm -f "${PORTAINER_VALUES_TMP}"
