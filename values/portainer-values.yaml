@@ -1,0 +1,97 @@
+---
+# Helm values для Portainer
+# Используется с Helm chart: portainer/portainer
+#
+# Portainer - веб-интерфейс для управления Kubernetes и Docker
+
+# Общие настройки
+nameOverride: ""
+fullnameOverride: ""
+
+# Настройки Portainer
+portainer:
+  enabled: true
+
+  # Образ Portainer
+  image:
+    repository: portainer/portainer-ce
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  # Режим работы
+  # kubernetes - для управления Kubernetes
+  # docker - для управления Docker (требует docker.sock)
+  mode: kubernetes
+
+  # Service для доступа к Portainer
+  service:
+    type: ClusterIP
+    port: 9000
+
+  # Ingress для Portainer
+  ingress:
+    enabled: false  # Включается через переменную ENABLE_INGRESS
+    ingressClassName: nginx  # Настраивается через переменную INGRESS_CLASS
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      # Ограничение доступа (раскомментировать при необходимости)
+      # nginx.ingress.kubernetes.io/whitelist-source-range: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+    hosts:
+      - host: portainer.PLACEHOLDER_DOMAIN  # Заменяется в setup.sh
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: portainer-tls
+        hosts:
+          - portainer.PLACEHOLDER_DOMAIN  # Заменяется в setup.sh
+
+  # Persistence для хранения данных
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClassName: ""
+    accessModes:
+      - ReadWriteOnce
+
+  # Ресурсы для Portainer
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  # Переменные окружения
+  env:
+    - name: PORTAINER_AUTH_TOKEN_DURATION
+      value: "24h"
+    - name: PORTAINER_TELEMETRY
+      value: "false"
+
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+
+# Portainer Agent (для удаленного управления Docker серверами)
+portainerAgent:
+  enabled: false  # Включается отдельно на серверах приложений
+
+  image:
+    repository: portainer/agent
+    tag: latest
+
+  service:
+    type: ClusterIP
+    port: 9001
+
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi

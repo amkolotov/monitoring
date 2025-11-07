@@ -1,0 +1,32 @@
+---
+# Пример: ServiceMonitor для Django приложения
+# Предполагается, что Django экспортирует метрики на /metrics
+# (например, через django-prometheus)
+#
+# ИНСТРУКЦИЯ:
+# 1. Замените myproject на имя вашего проекта
+# 2. Убедитесь, что ваш Service имеет соответствующие labels
+# 3. Примените манифест: kubectl apply -f servicemonitor-example.yaml
+#
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: myproject-web-http
+  namespace: myproject
+  labels:
+    app: myproject
+    monitoring: enabled
+    project: myproject
+spec:
+  selector:
+    matchLabels:
+      app: myproject-web-http
+      monitoring: enabled
+  namespaceSelector:
+    matchNames:
+      - myproject
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s

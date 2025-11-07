@@ -1,0 +1,58 @@
+---
+# Шаблон PodMonitor для мониторинга подов напрямую
+# Используется когда нет Service или нужен мониторинг конкретных подов
+#
+# ИНСТРУКЦИЯ ПО ИСПОЛЬЗОВАНИЮ:
+# 1. Скопируйте этот файл в ваш проект
+# 2. Замените все вхождения PROJECT_NAME на имя вашего проекта
+# 3. Замените YOUR_PROJECT_NAMESPACE на namespace вашего проекта
+# 4. Настройте selector.matchLabels под ваши Pod labels
+# 5. Настройте podMetricsEndpoints под ваши порты и пути
+#
+# ВАЖНО: Ваши Pods должны иметь label "monitoring: enabled"
+#
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: PROJECT_NAME-pods
+  namespace: YOUR_PROJECT_NAMESPACE
+  labels:
+    app: PROJECT_NAME
+    monitoring: enabled
+    project: PROJECT_NAME
+spec:
+  selector:
+    matchLabels:
+      app: PROJECT_NAME-web
+      monitoring: enabled
+  # Вариант 1: PodMonitor в namespace проекта
+  namespaceSelector:
+    matchNames:
+      - YOUR_PROJECT_NAMESPACE
+  # Вариант 2: PodMonitor в namespace monitoring (централизованное управление)
+  # namespaceSelector:
+  #   any: true
+  podMetricsEndpoints:
+  - port: metrics                    # Имя порта в Pod
+    path: /metrics                   # Путь к метрикам Prometheus
+    interval: 30s                    # Интервал сбора метрик
+    scrapeTimeout: 10s                # Таймаут сбора
+    # Опционально: для базовой аутентификации
+    # basicAuth:
+    #   username:
+    #     name: metrics-auth
+    #     key: username
+    #   password:
+    #     name: metrics-auth
+    #     key: password
+    # Опционально: для TLS
+    # tlsConfig:
+    #   insecureSkipVerify: false
+    #   ca:
+    #     name: metrics-tls-ca
+    #     key: ca.crt
+    # Опционально: фильтрация подов
+    # relabelings:
+    #   - action: keep
+    #     sourceLabels: [__meta_kubernetes_pod_label_app]
+    #     regex: PROJECT_NAME-web

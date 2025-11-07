@@ -1,0 +1,111 @@
+---
+# Шаблон Grafana Dashboard для проекта
+#
+# ИНСТРУКЦИЯ ПО ИСПОЛЬЗОВАНИЮ:
+# 1. Скопируйте этот файл в ваш проект
+# 2. Замените все вхождения PROJECT_NAME на имя вашего проекта
+# 3. Настройте панели под ваши метрики
+# 4. Примените через ConfigMap или через Grafana API
+#
+# ВАРИАНТ 1: Через ConfigMap (рекомендуется)
+# Создайте ConfigMap с этим содержимым и примените в namespace monitoring
+#
+# ВАРИАНТ 2: Через Grafana UI
+# Скопируйте JSON в Grafana → Dashboards → Import
+#
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-PROJECT_NAME
+  namespace: monitoring
+  labels:
+    app: grafana
+    grafana_dashboard: "1"
+    project: PROJECT_NAME
+data:
+  PROJECT_NAME-dashboard.json: |
+    {
+      "dashboard": {
+        "title": "PROJECT_NAME - Application Metrics",
+        "tags": ["PROJECT_NAME", "application"],
+        "timezone": "browser",
+        "schemaVersion": 27,
+        "version": 1,
+        "refresh": "30s",
+        "panels": [
+          {
+            "id": 1,
+            "title": "HTTP Request Rate",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(http_requests_total{namespace=\"YOUR_PROJECT_NAMESPACE\"}[5m])",
+                "legendFormat": "{{method}} {{status}}",
+                "refId": "A"
+              }
+            ],
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 0
+            }
+          },
+          {
+            "id": 2,
+            "title": "HTTP Error Rate",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(http_requests_total{namespace=\"YOUR_PROJECT_NAMESPACE\",status=~\"5..\"}[5m])",
+                "legendFormat": "5xx errors",
+                "refId": "A"
+              }
+            ],
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 0
+            }
+          },
+          {
+            "id": 3,
+            "title": "Request Duration",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{namespace=\"YOUR_PROJECT_NAMESPACE\"}[5m]))",
+                "legendFormat": "p95",
+                "refId": "A"
+              },
+              {
+                "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{namespace=\"YOUR_PROJECT_NAMESPACE\"}[5m]))",
+                "legendFormat": "p99",
+                "refId": "B"
+              }
+            ],
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 8
+            }
+          }
+        ],
+        "templating": {
+          "list": [
+            {
+              "name": "namespace",
+              "type": "query",
+              "query": "label_values(namespace)",
+              "current": {
+                "text": "YOUR_PROJECT_NAMESPACE",
+                "value": "YOUR_PROJECT_NAMESPACE"
+              },
+              "options": []
+            }
+          ]
+        }
+      }
+    }

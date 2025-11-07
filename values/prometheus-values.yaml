@@ -1,0 +1,185 @@
+---
+# Helm values для Prometheus Operator
+# Используется с Helm chart: kube-prometheus-stack
+#
+# КРИТИЧЕСКИЕ НАСТРОЙКИ ДЛЯ МУЛЬТИПРОЕКТНОСТИ:
+# - serviceMonitorSelectorNilUsesHelmValues: false - ОБЯЗАТЕЛЬНО!
+# - podMonitorSelectorNilUsesHelmValues: false - ОБЯЗАТЕЛЬНО!
+# - serviceMonitorNamespaceSelector: {} - собирать из всех namespace
+
+# Общие настройки
+nameOverride: ""
+fullnameOverride: ""
+
+# Настройки Prometheus Operator
+prometheusOperator:
+  enabled: true
+  image:
+    repository: quay.io/prometheus-operator/prometheus-operator
+    tag: v0.68.0
+  resources:
+    limits:
+      cpu: 200m
+      memory: 200Mi
+    requests:
+      cpu: 100m
+      memory: 100Mi
+
+# Настройки Prometheus
+prometheus:
+  enabled: true
+
+  prometheusSpec:
+    # КРИТИЧНО: разрешаем сбор метрик из всех namespace
+    # Без этой настройки Prometheus будет собирать метрики только из namespace monitoring
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+
+    # ServiceMonitorNamespaceSelector - из каких namespace собирать ServiceMonitor
+    # {} означает все namespace (мультипроектность)
+    serviceMonitorNamespaceSelector: {}
+
+    # Альтернативный вариант: фильтрация по label (опционально, для безопасности)
+    # serviceMonitorNamespaceSelector:
+    #   matchLabels:
+    #     monitoring: enabled
+
+    # PodMonitorNamespaceSelector - из каких namespace собирать PodMonitor
+    podMonitorNamespaceSelector: {}
+
+    # Время хранения метрик (по умолчанию 15d, настраивается через переменную окружения)
+    retention: 15d
+
+    # Размер хранилища (по умолчанию 20Gi, настраивается через переменную окружения)
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 20Gi
+
+    # Ресурсы для Prometheus
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+      requests:
+        cpu: 1000m
+        memory: 2Gi
+
+    # Количество реплик
+    replicas: 1
+
+    # Правила алертинга
+    ruleSelector: {}
+    ruleNamespaceSelector: {}
+
+    # Дополнительные scrape configs (если нужны статические targets)
+    # additionalScrapeConfigs: []
+
+    # External URL для генерации ссылок в алертах
+    externalUrl: ""
+
+    # Service для доступа к Prometheus
+    serviceMonitor:
+      enabled: true
+
+  # Ingress для Prometheus
+  ingress:
+    enabled: false  # Включается через переменную ENABLE_INGRESS
+    ingressClassName: nginx  # Настраивается через переменную INGRESS_CLASS
+    hosts:
+      - prometheus.PLACEHOLDER_DOMAIN  # Заменяется в setup.sh
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      # Ограничение доступа (раскомментировать при необходимости)
+      # nginx.ingress.kubernetes.io/whitelist-source-range: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+      # Или базовая аутентификация
+      # nginx.ingress.kubernetes.io/auth-type: basic
+      # nginx.ingress.kubernetes.io/auth-secret: prometheus-auth
+    tls:
+      - secretName: prometheus-tls
+        hosts:
+          - prometheus.PLACEHOLDER_DOMAIN  # Заменяется в setup.sh
+
+# Настройки Alertmanager
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    retention: 120h
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+# Настройки Grafana
+grafana:
+  enabled: true
+  adminUser: admin
+  adminPassword: admin  # ВАЖНО: измените пароль после установки!
+
+  persistence:
+    enabled: true
+    size: 10Gi
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  # Provisioning datasources
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          access: proxy
+          url: http://prometheus-kube-prometheus-prometheus:9090
+          isDefault: true
+          editable: true
+        - name: Loki
+          type: loki
+          access: proxy
+          url: http://loki:3100
+          editable: true
+
+  # Ingress для Grafana
+  ingress:
+    enabled: false  # Включается через переменную ENABLE_INGRESS
+    ingressClassName: nginx  # Настраивается через переменную INGRESS_CLASS
+    hosts:
+      - grafana.PLACEHOLDER_DOMAIN  # Заменяется в setup.sh
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      # Аутентификация настраивается внутри Grafana
+    tls:
+      - secretName: grafana-tls
+        hosts:
+          - grafana.PLACEHOLDER_DOMAIN  # Заменяется в setup.sh
+
+# Node Exporter
+nodeExporter:
+  enabled: true
+
+# Kube State Metrics
+kubeStateMetrics:
+  enabled: true
+
+# Default rules
+defaultRules:
+  create: true

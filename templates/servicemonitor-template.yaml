@@ -1,0 +1,57 @@
+---
+# Шаблон ServiceMonitor для подключения проекта к мониторингу
+#
+# ИНСТРУКЦИЯ ПО ИСПОЛЬЗОВАНИЮ:
+# 1. Скопируйте этот файл в ваш проект
+# 2. Замените все вхождения PROJECT_NAME на имя вашего проекта
+# 3. Замените YOUR_PROJECT_NAMESPACE на namespace вашего проекта
+# 4. Настройте selector.matchLabels под ваши Service labels
+# 5. Настройте endpoints под ваши порты и пути к метрикам
+#
+# ВАЖНО: Ваш Service должен иметь label "monitoring: enabled"
+#
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: PROJECT_NAME-web-http      # Измените PROJECT_NAME
+  namespace: YOUR_PROJECT_NAMESPACE # Namespace вашего проекта
+  labels:
+    app: PROJECT_NAME               # Измените
+    monitoring: enabled             # Обязательный label для фильтрации
+    project: PROJECT_NAME           # Для группировки в Grafana
+spec:
+  selector:
+    matchLabels:
+      app: PROJECT_NAME-web-http    # Должен совпадать с Service
+      monitoring: enabled            # Обязательный label
+  # Вариант 1: ServiceMonitor в namespace проекта
+  namespaceSelector:
+    matchNames:
+      - YOUR_PROJECT_NAMESPACE      # Указываем конкретный namespace
+  # Вариант 2: ServiceMonitor в namespace monitoring (централизованное управление)
+  # Раскомментируйте, если хотите хранить ServiceMonitor в namespace monitoring
+  # namespaceSelector:
+  #   any: true                      # Или any: true для всех namespace
+  endpoints:
+  - port: http                      # Имя порта в Service
+    path: /metrics                  # Путь к метрикам Prometheus
+    interval: 30s                   # Интервал сбора метрик
+    scrapeTimeout: 10s               # Таймаут сбора
+    # Опционально: для базовой аутентификации
+    # basicAuth:
+    #   username:
+    #     name: metrics-auth
+    #     key: username
+    #   password:
+    #     name: metrics-auth
+    #     key: password
+    # Опционально: для TLS
+    # tlsConfig:
+    #   insecureSkipVerify: false
+    #   ca:
+    #     name: metrics-tls-ca
+    #     key: ca.crt
+    # Опционально: дополнительные метки
+    # relabelings:
+    #   - sourceLabels: [__meta_kubernetes_pod_name]
+    #     targetLabel: pod

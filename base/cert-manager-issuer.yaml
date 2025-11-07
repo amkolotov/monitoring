@@ -1,0 +1,57 @@
+---
+# ClusterIssuer для Let's Encrypt
+# Используется для автоматической выдачи TLS сертификатов
+#
+# ИНСТРУКЦИЯ:
+# 1. Замените email на ваш реальный email
+# 2. Замените class: nginx на класс вашего Ingress Controller (если отличается)
+# 3. Примените: kubectl apply -f base/cert-manager-issuer.yaml
+#
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    # Let's Encrypt production сервер
+    server: https://acme-v02.api.letsencrypt.org/directory
+    # Email для уведомлений (ЗАМЕНИТЕ!)
+    email: admin@example.com
+    # Секрет для хранения приватного ключа
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    # Метод решения ACME challenge
+    solvers:
+    - http01:
+        ingress:
+          # Класс Ingress Controller (ЗАМЕНИТЕ если используете другой!)
+          class: nginx
+
+---
+# ClusterIssuer для Let's Encrypt Staging (для тестирования)
+# Используйте для тестирования перед переходом на production
+#
+# ИНСТРУКЦИЯ:
+# 1. Используйте для тестирования (выдает невалидные сертификаты)
+# 2. После успешного тестирования переключитесь на letsencrypt-prod
+# 3. Примените: kubectl apply -f base/cert-manager-issuer.yaml
+#
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    # Let's Encrypt staging сервер (для тестирования)
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    # Email для уведомлений (ЗАМЕНИТЕ!)
+    email: admin@example.com
+    # Секрет для хранения приватного ключа
+    privateKeySecretRef:
+      name: letsencrypt-staging
+    # Метод решения ACME challenge
+    solvers:
+    - http01:
+        ingress:
+          # Класс Ingress Controller (ЗАМЕНИТЕ если используете другой!)
+          class: nginx

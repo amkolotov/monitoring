@@ -1,0 +1,9 @@
+---
+# Namespace для стека мониторинга
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    name: monitoring
+    monitoring: enabled

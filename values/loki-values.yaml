@@ -1,0 +1,190 @@
+---
+# Helm values для Loki
+# Используется с Helm chart: loki-stack или grafana/loki-stack
+#
+# КРИТИЧЕСКИЕ НАСТРОЙКИ ДЛЯ МУЛЬТИПРОЕКТНОСТИ:
+# - Promtail собирает логи из ВСЕХ подов во ВСЕХ namespace автоматически
+# - Фильтрация происходит по labels в Loki запросах
+
+# Общие настройки
+nameOverride: ""
+fullnameOverride: ""
+
+# Настройки Loki
+loki:
+  enabled: true
+
+  # Конфигурация Loki
+  config:
+    auth_enabled: false
+
+    # Настройки хранения
+    schema_config:
+      configs:
+        - from: "2020-10-24"
+          store: boltdb-shipper
+          object_store: filesystem
+          schema: v11
+          index:
+            prefix: index_
+            period: 24h
+
+    # Настройки storage
+    storage_config:
+      boltdb_shipper:
+        active_index_directory: /loki/index
+        cache_location: /loki/cache
+        shared_store: filesystem
+      filesystem:
+        directory: /loki/chunks
+
+    # Лимиты
+    limits_config:
+      # Время хранения логов (по умолчанию 744h = 31 день)
+      retention_period: 744h
+      # Лимит скорости приема логов
+      ingestion_rate_mb: 16
+      ingestion_burst_size_mb: 32
+      # Максимальное количество потоков (streams)
+      max_streams_per_user: 10000
+      # Максимальная длина лога
+      max_line_size: 256KB
+
+    # Настройки chunk store
+    chunk_store_config:
+      max_look_back_period: 0s
+
+    # Настройки table manager
+    table_manager:
+      retention_deletes_enabled: true
+      retention_period: 744h
+
+  # Persistence для хранения логов
+  persistence:
+    enabled: true
+    size: 20Gi  # По умолчанию, настраивается через переменную окружения
+    storageClassName: ""
+    accessModes:
+      - ReadWriteOnce
+
+  # Ресурсы для Loki
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+
+  # Service для доступа к Loki
+  service:
+    type: ClusterIP
+    port: 3100
+
+# Настройки Promtail
+promtail:
+  enabled: true
+
+  # Конфигурация Promtail
+  config:
+    # Клиенты для отправки логов
+    clients:
+      - url: http://loki:3100/loki/api/v1/push
+
+    # Конфигурация сбора логов
+    scrapeConfigs:
+      # Job для сбора логов из Kubernetes подов
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+            # Собирает логи из ВСЕХ namespace автоматически
+        # Pipeline stages для обработки логов
+        pipelineStages:
+          - docker: {}
+          - labels:
+              namespace: __meta_kubernetes_namespace
+              pod: __meta_kubernetes_pod_name
+              container: __meta_kubernetes_pod_container_name
+              app: __meta_kubernetes_pod_label_app
+              project: __meta_kubernetes_pod_label_project
+              monitoring: __meta_kubernetes_pod_label_monitoring
+        # Relabel configs для добавления меток
+        relabel_configs:
+          # Добавляем namespace как label
+          - action: replace
+            source_labels:
+              - __meta_kubernetes_namespace
+            target_label: namespace
+
+          # Добавляем имя пода как label
+          - action: replace
+            source_labels:
+              - __meta_kubernetes_pod_name
+            target_label: pod
+
+          # Добавляем имя контейнера как label
+          - action: replace
+            source_labels:
+              - __meta_kubernetes_pod_container_name
+            target_label: container
+
+          # Добавляем labels из подов
+          - action: replace
+            source_labels:
+              - __meta_kubernetes_pod_label_app
+            target_label: app
+            regex: (.+)
+
+          - action: replace
+            source_labels:
+              - __meta_kubernetes_pod_label_project
+            target_label: project
+            regex: (.+)
+
+          # Добавляем имя ноды
+          - action: replace
+            source_labels:
+              - __meta_kubernetes_pod_node_name
+            target_label: node
+
+          # Удаляем служебные метки
+          - action: labeldrop
+            regex: __meta_kubernetes_pod_label_present.*
+
+          # Фильтр: собирать только логи с label monitoring=enabled (опционально)
+          # Раскомментируйте для ограничения сбора логов
+          # - action: keep
+          #   source_labels:
+          #     - __meta_kubernetes_pod_label_monitoring
+          #   regex: enabled
+
+  # Ресурсы для Promtail
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  # ServiceAccount для доступа к Kubernetes API
+  serviceAccount:
+    create: true
+    annotations: {}
+
+  # RBAC для доступа к подам
+  rbac:
+    create: true
+    rules:
+      - apiGroups: [""]
+        resources:
+          - nodes
+          - nodes/proxy
+          - services
+          - endpoints
+          - pods
+        verbs: ["get", "list", "watch"]
+
+# Настройки Grafana (если используется loki-stack с Grafana)
+grafana:
+  enabled: false  # Обычно Grafana устанавливается отдельно через kube-prometheus-stack
