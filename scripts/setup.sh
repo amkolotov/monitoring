@@ -162,6 +162,25 @@ sed -e "s|retention: 15d|retention: ${PROMETHEUS_RETENTION}|g" \
     -e "s|adminPassword: admin|adminPassword: ${GRAFANA_PASSWORD}|g" \
     "${PROMETHEUS_VALUES}" > "${PROMETHEUS_VALUES_TMP}"
 
+# Исправление initChownData (отключение busybox для избежания Docker Hub rate limit)
+# Всегда отключаем, т.к. это вызывает проблемы с Docker Hub rate limit
+log_info "Отключение initChownData для избежания Docker Hub rate limit..."
+sed -i '/initChownData:/,/^[[:space:]]*[a-zA-Z-]/ {
+    /enabled:/ s/enabled: true/enabled: false/
+}' "${PROMETHEUS_VALUES_TMP}"
+# Дополнительная проверка - если не сработало, заменяем напрямую
+if grep -q "enabled: true" "${PROMETHEUS_VALUES_TMP}" | grep -A 2 "initChownData" 2>/dev/null; then
+    sed -i '/initChownData:/,/^[[:space:]]*[a-zA-Z-]/ {
+        s/^[[:space:]]*enabled: true[[:space:]]*$/    enabled: false/
+    }' "${PROMETHEUS_VALUES_TMP}"
+fi
+
+# Исправление datasources (только один isDefault: true)
+log_info "Проверка конфигурации datasources..."
+sed -i '/- name: Loki/,/editable:/ {
+    /isDefault:/ s/isDefault: true/isDefault: false/
+}' "${PROMETHEUS_VALUES_TMP}"
+
 # Замена для Ingress (если включен)
 if [ "$ENABLE_INGRESS" == "true" ]; then
   log_info "Настройка Ingress для Prometheus и Grafana..."
@@ -205,13 +224,16 @@ if helm list -n "${MONITORING_NAMESPACE}" | grep -q "^kube-prometheus-stack"; th
     log_warn "Prometheus уже установлен, выполняется обновление..."
     log_info "Это может занять несколько минут..."
 
+    # Используем --reuse-values для сохранения существующих настроек (особенно PVC)
+    HELM_UPGRADE_ARGS="-f ${PROMETHEUS_VALUES_TMP} --reuse-values"
+
     # Запускаем upgrade в фоне и показываем прогресс
     if [ "$HELM_WAIT" == "true" ]; then
         # С таймаутом показываем прогресс подов
         (
             helm upgrade kube-prometheus-stack prometheus-community/kube-prometheus-stack \
                 -n "${MONITORING_NAMESPACE}" \
-                -f "${PROMETHEUS_VALUES_TMP}" \
+                ${HELM_UPGRADE_ARGS} \
                 ${HELM_WAIT_ARGS} &
             HELM_PID=$!
 
@@ -227,7 +249,7 @@ if helm list -n "${MONITORING_NAMESPACE}" | grep -q "^kube-prometheus-stack"; th
     else
         helm upgrade kube-prometheus-stack prometheus-community/kube-prometheus-stack \
             -n "${MONITORING_NAMESPACE}" \
-            -f "${PROMETHEUS_VALUES_TMP}" \
+            ${HELM_UPGRADE_ARGS} \
             ${HELM_WAIT_ARGS}
         HELM_EXIT=$?
     fi
